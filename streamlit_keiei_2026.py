@@ -5,7 +5,6 @@
 """
 
 import streamlit as st
-import pandas_datareader.data as pdr
 import pandas as pd
 import numpy as np
 import math
@@ -48,13 +47,32 @@ def get_stooq_codes(df_all, selections):
     return df_sel, codes, stock_names
 
 
+def _fetch_stooq_csv(ticker: str, start: dt.date, end: dt.date) -> pd.DataFrame:
+    """pandas_datareader を使わず stooq CSV を直接取得する"""
+    url = (
+        "https://stooq.com/q/d/l/"
+        f"?s={ticker.lower()}"
+        f"&d1={start.strftime('%Y%m%d')}"
+        f"&d2={end.strftime('%Y%m%d')}"
+        "&i=d"
+    )
+    df = pd.read_csv(url, parse_dates=['Date'])
+    if df.empty or 'Close' not in df.columns:
+        raise ValueError(
+            f"{ticker}: データが見つかりませんでした。"
+            "銘柄コードまたは期間を確認してください。"
+        )
+    return df.sort_values('Date', ascending=False).reset_index(drop=True)
+
+
 def fetch_price_and_returns(codes, stock_names, start, end):
     """stooq から株価を取得し、価格 DataFrame と対数収益率 DataFrame を返す"""
     dfs_price, dfs_ret = [], []
     for code, name in zip(codes, stock_names):
-        df = pdr.DataReader(code, "stooq", start=start, end=end)
-        price_s = df['Close'].rename(name).reset_index()
-        log_ret_s = (np.log(df['Close']) - np.log(df['Close'].shift(-1))).dropna()
+        df = _fetch_stooq_csv(code, start, end)
+        close = df.set_index('Date')['Close']          # Date インデックス・降順
+        price_s = close.rename(name).reset_index()
+        log_ret_s = (np.log(close) - np.log(close.shift(-1))).dropna()
         log_ret_s = log_ret_s.rename(name).reset_index()
         dfs_price.append(price_s)
         dfs_ret.append(log_ret_s)
