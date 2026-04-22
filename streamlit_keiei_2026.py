@@ -256,6 +256,26 @@ def main():
             f'シャープレシオ計算に使用する rf: {rf_period:.4f}（年率 {rf_pct:.2f}% をそのまま使用）'
         )
 
+    # ── 学生のポートフォリオ投資比率 ─────────────
+    student_weights = {}
+    if selections and len(selections) >= 2:
+        st.subheader('学生のポートフォリオ投資比率 (%)')
+        n_sel = len(stock_names)
+        default_w = round(100.0 / n_sel, 1)
+        cols_w = st.columns(n_sel)
+        for i, name in enumerate(stock_names):
+            with cols_w[i]:
+                student_weights[name] = st.number_input(
+                    name, min_value=0.0, max_value=100.0,
+                    value=default_w, step=0.1, format='%.1f',
+                    key=f'w_{name}',
+                )
+        total_w = sum(student_weights.values())
+        if abs(total_w - 100.0) > 1.0:
+            st.warning(f'投資比率の合計: {total_w:.1f}%（合計が 100% になるよう入力してください）')
+        else:
+            st.caption(f'投資比率の合計: {total_w:.1f}% ✓')
+
     # ── 計算実行ボタン ─────────────────────────
     if not st.button('Submit and calculate'):
         return
@@ -350,19 +370,28 @@ def main():
     # ─ 課題 1.4 ─
     st.subheader('課題 1.4')
 
-    st.write('**各銘柄のシャープレシオ（rf = 0 での計算）**')
-    st.dataframe((mu_vec / sigma_vec).rename('SR (rf=0)'))
-
-    st.write(f'**各銘柄のシャープレシオ（rf = {rf_pct:.2f}% での計算）**')
+    st.write(f'**各銘柄のシャープレシオ（rf = {rf_pct:.2f}%）**')
     sr_stocks = (mu_vec - rf_period) / sigma_vec
     st.dataframe(sr_stocks.rename(f'SR (rf={rf_pct:.2f}%)'))
 
-    st.write('**ポートフォリオのシャープレシオの計算式（参考）**')
-    st.latex(r'SR_p = \frac{\mu_p - r_f}{\sigma_p}')
-    st.write(
-        'ポートフォリオの期待収益率 $\\mu_p$ と標準偏差 $\\sigma_p$ が正しく計算されていれば OK。'
-        '標準偏差は**単純な加重平均でなく**，分散共分散行列を用いて計算する点に注意。'
-    )
+    st.write(f'**ポートフォリオのシャープレシオ（rf = {rf_pct:.2f}%）**')
+    w_arr = np.array([student_weights[name] / 100.0 for name in stock_names])
+    cov_annual = df_nd.cov().values * PERIOD_DAYS
+    mu_p    = float(w_arr @ mu_vec.values)
+    sigma_p = float(math.sqrt(max(w_arr @ cov_annual @ w_arr, 0.0)))
+    sr_p    = (mu_p - rf_period) / sigma_p if sigma_p > 1e-10 else float('nan')
+
+    col_a, col_b, col_c, col_d = st.columns(4)
+    with col_a:
+        st.metric('投資比率', ' / '.join(f'{w*100:.1f}%' for w in w_arr))
+    with col_b:
+        st.metric('期待収益率 μ_p', f'{mu_p:.4f}')
+    with col_c:
+        st.metric('標準偏差 σ_p', f'{sigma_p:.4f}')
+    with col_d:
+        st.metric('シャープレシオ SR_p', f'{sr_p:.4f}')
+
+    st.caption('標準偏差は単純な加重平均でなく，分散共分散行列を用いた計算になる点に注意。')
 
     # ══════════════════════════════════════════
     st.header('課題 2')
