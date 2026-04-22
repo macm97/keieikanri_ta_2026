@@ -5,6 +5,7 @@
 """
 
 import streamlit as st
+import yfinance as yf
 import pandas as pd
 import numpy as np
 import math
@@ -39,47 +40,38 @@ def load_company_list(path):
     return df
 
 
-def get_stooq_codes(df_all, selections):
-    """選択銘柄から stooq コード・表示名を取得"""
+def get_tickers(df_all, selections):
+    """選択銘柄から Yahoo Finance ティッカー（1301.T 形式）と表示名を取得"""
     df_sel = df_all[df_all['コード&銘柄名'].isin(selections)].copy()
-    codes = [str(c) + '.JP' for c in df_sel['コード']]
+    tickers = [str(c) + '.T' for c in df_sel['コード']]
     stock_names = sorted(selections)  # ソート済みで列名に使う
-    return df_sel, codes, stock_names
+    return df_sel, tickers, stock_names
 
 
-def _fetch_stooq_csv(ticker: str, start: dt.date, end: dt.date) -> pd.DataFrame:
-    """pandas_datareader を使わず stooq CSV を直接取得する"""
-    url = (
-        "https://stooq.com/q/d/l/"
-        f"?s={ticker.lower()}"
-        f"&d1={start.strftime('%Y%m%d')}"
-        f"&d2={end.strftime('%Y%m%d')}"
-        "&i=d"
-    )
-    df = pd.read_csv(url, parse_dates=['Date'])
-    if df.empty or 'Close' not in df.columns:
-        raise ValueError(
-            f"{ticker}: データが見つかりませんでした。"
-            "銘柄コードまたは期間を確認してください。"
-        )
-    return df.sort_values('Date', ascending=False).reset_index(drop=True)
-
-
-def fetch_price_and_returns(codes, stock_names, start, end):
-    """stooq から株価を取得し、価格 DataFrame と対数収益率 DataFrame を返す"""
+def fetch_price_and_returns(tickers, stock_names, start, end):
+    """Yahoo Finance から株価を取得し、価格 DataFrame と対数収益率 DataFrame を返す"""
     dfs_price, dfs_ret = [], []
-    for code, name in zip(codes, stock_names):
-        df = _fetch_stooq_csv(code, start, end)
-        close = df.set_index('Date')['Close']          # Date インデックス・降順
-        price_s = close.rename(name).reset_index()
-        log_ret_s = (np.log(close) - np.log(close.shift(-1))).dropna()
-        log_ret_s = log_ret_s.rename(name).reset_index()
+    for ticker, name in zip(tickers, stock_names):
+        hist = yf.Ticker(ticker).history(start=start, end=end)
+        if hist.empty:
+            raise ValueError(
+                f"{ticker}: データが見つかりませんでした。"
+                "銘柄コードまたは期間を確認してください。"
+            )
+        # タイムゾーンを除去して日付のみに正規化
+        hist.index = pd.to_datetime(hist.index.date)
+        close = hist['Close'].rename(name)
+        price_s = close.reset_index()
+        price_s.columns = ['Date', name]
+        # 昇順データなので shift(1) で前日の価格を取得
+        log_ret_s = (np.log(close) - np.log(close.shift(1))).dropna()
+        log_ret_df = pd.DataFrame({'Date': log_ret_s.index, name: log_ret_s.values})
         dfs_price.append(price_s)
-        dfs_ret.append(log_ret_s)
+        dfs_ret.append(log_ret_df)
 
     df_p = dfs_price[0]
     df_r = dfs_ret[0]
-    for i in range(1, len(codes)):
+    for i in range(1, len(tickers)):
         df_p = pd.merge(df_p, dfs_price[i], on='Date')
         df_r = pd.merge(df_r, dfs_ret[i], on='Date')
 
@@ -228,7 +220,7 @@ def main():
     selections = sorted(selections_temp)
 
     if selections:
-        df_sel, codes, stock_names = get_stooq_codes(df_all, selections)
+        df_sel, tickers, stock_names = get_tickers(df_all, selections)
         st.write('選択銘柄:')
         st.dataframe(
             df_sel[['コード', '銘柄名', '市場・商品区分', '33業種区分']],
@@ -238,7 +230,7 @@ def main():
     with st.expander('for developer'):
         if selections:
             st.write('stock_names:', stock_names)
-            st.write('codes:', codes)
+            st.write('tickers:', tickers)
 
     # ── パラメータ設定 ─────────────────────────
     st.header('パラメータ設定')
@@ -285,7 +277,7 @@ def main():
     with st.spinner('株価データを取得中...'):
         try:
             df_price, df_ret = fetch_price_and_returns(
-                codes, stock_names, date_start, date_end
+                tickers, stock_names, date_start, date_end
             )
         except Exception as e:
             st.error(f'データ取得エラー: {e}')
