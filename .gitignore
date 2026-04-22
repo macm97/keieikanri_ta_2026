@@ -1,0 +1,11 @@
+# 旧バージョン（デプロイ不要）
+streamlit_keiei.py
+data_j_2023.6.xls
+data_j_2023.6_hankaku.xls
+
+# 課題PDF（学生提出物）
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
