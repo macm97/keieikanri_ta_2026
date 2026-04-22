@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 st.set_page_config(layout="wide")
 
 DATA_PATH = 'data_j_2026.xls'
-PERIOD_DAYS = 125  # 半年 ≈ 125 取引日
+PERIOD_DAYS = 252  # 1年 = 252 営業日
 
 
 # ─────────────────────────────────────────────
@@ -90,8 +90,8 @@ def run_monte_carlo(df_nd, N, period, zero_corr=False):
     if zero_corr:
         vcm = np.diag(np.diag(vcm))  # 対角成分のみ残す（共分散 = 0）
 
-    np_vcm = vcm * period               # 半年分分散共分散行列
-    np_mean = df_nd.mean().values * period  # 半年分期待収益率ベクトル
+    np_vcm = vcm * period               # 1年分分散共分散行列
+    np_mean = df_nd.mean().values * period  # 1年分期待収益率ベクトル
 
     weights = np.random.uniform(size=(N, n))
     weights /= weights.sum(axis=1, keepdims=True)
@@ -189,8 +189,8 @@ def make_frontier_figure(df_mc, stock_names, rf_period, rf_pct, title):
 
     fig.update_layout(
         title=title,
-        xaxis_title='収益率の標準偏差 σ（半年）',
-        yaxis_title='期待収益率 μ（半年）',
+        xaxis_title='収益率の標準偏差 σ（1年）',
+        yaxis_title='期待収益率 μ（1年）',
         height=560, width=920,
         legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.8)'),
     )
@@ -250,11 +250,10 @@ def main():
             value=2.50, step=0.05, format='%.2f',
         )
         rf_annual = rf_pct / 100.0
-        # 半年（125 日）対応の対数収益率換算
-        rf_period = math.log(1 + rf_annual) * (PERIOD_DAYS / 250)
+        # 設問の指定通り年率をそのまま使用（半年換算しない）
+        rf_period = rf_annual
         st.caption(
-            f'半年（{PERIOD_DAYS} 日）換算 無リスク対数収益率: '
-            f'{rf_period:.5f}  （= ln(1+{rf_pct:.2f}%) × {PERIOD_DAYS}/250）'
+            f'シャープレシオ計算に使用する rf: {rf_period:.4f}（年率 {rf_pct:.2f}% をそのまま使用）'
         )
 
     # ── 計算実行ボタン ─────────────────────────
@@ -328,7 +327,7 @@ def main():
 
     # ─ 課題 1.3 ─
     st.subheader('課題 1.3')
-    st.write(f'半年（{PERIOD_DAYS} 日）対応の期待収益率・標準偏差・相関係数')
+    st.write(f'1年（{PERIOD_DAYS} 営業日）を1期間とした期待収益率・標準偏差・相関係数')
 
     df_nd = df_ret.drop(columns='Date')
     mu_vec    = df_nd.mean() * PERIOD_DAYS
@@ -423,14 +422,14 @@ def main():
     delta_sigma = t_sig - t_sig0
     if delta_sigma > 0:
         st.write(
-            f'✅  接点ポートフォリオのリスク（標準偏差）が減少しました '
+            f'✅ 接点ポートフォリオのリスク（標準偏差）が減少しました '
             f'（{t_sig:.4f} → {t_sig0:.4f}，差 = {delta_sigma:.4f}）。'
             '相関係数 = 0 のほうが分散投資の効果が大きくなるため，これは理論通りの結果です。'
         )
     else:
         st.warning(
-            f'接点ポートフォリオのリスクが増加しました（{t_sig:.4f} → {t_sig0:.4f}）。'
-            'MC のサンプリングによる誤差の可能性があります。試行回数を増やして再実行してください。'
+            f'接点ポートフォリオのリスクが増加しています（{t_sig:.4f} → {t_sig0:.4f}）。'
+            'MC のサンプリング誤差の可能性があります。試行回数を増やして再実行してください。'
         )
 
 
