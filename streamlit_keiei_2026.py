@@ -50,7 +50,7 @@ def fetch_price_and_returns(tickers, stock_names, start, end):
     """Yahoo Finance から株価を取得し、価格 DataFrame と対数収益率 DataFrame を返す"""
     dfs_price, dfs_ret = [], []
     for ticker, name in zip(tickers, stock_names):
-        hist = yf.Ticker(ticker).history(start=start, end=end)
+        hist = yf.Ticker(ticker).history(start=start, end=end, auto_adjust=False)
         if hist.empty:
             raise ValueError(
                 f"{ticker}: データが見つかりませんでした。"
